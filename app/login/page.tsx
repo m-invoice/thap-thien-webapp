@@ -21,6 +21,7 @@ export default function LoginPage() {
         ? error.message
         : 'Đăng ký thành công. Nếu hệ thống yêu cầu, hãy kiểm tra email để xác thực.'
     )
+
     setLoading(false)
   }
 
@@ -28,14 +29,21 @@ export default function LoginPage() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-    setMessage(error ? error.message : 'Đăng nhập thành công.')
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+      return
+    }
+
+    setMessage('Đăng nhập thành công.')
     setLoading(false)
 
-    if (!error) {
-      window.location.href = '/'
-    }
+    window.location.href = '/dashboard'
   }
 
   return (

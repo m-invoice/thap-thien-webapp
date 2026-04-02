@@ -48,7 +48,7 @@ export default async function ReviewPage() {
 
         {!wrongAnswers || wrongAnswers.length === 0 ? (
           <div className="border border-white/20 rounded-2xl p-6">
-            Chưa có câu sai nào. Quá đỉnh.
+            Chưa có câu sai nào.
           </div>
         ) : (
           <div className="space-y-6">
