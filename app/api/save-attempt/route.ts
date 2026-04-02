@@ -6,13 +6,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const supabase = await createClient()
 
-    const {
-      topicSlug,
-      score,
-      total,
-      answers,
-      questions,
-    } = body
+    const { topicSlug, score, total, answers, questions } = body
 
     const {
       data: { user },
@@ -57,23 +51,28 @@ export async function POST(req: Request) {
       )
     }
 
-    const answersData = questions.map((q: any) => ({
+    const safeQuestions = Array.isArray(questions) ? questions : []
+    const safeAnswers = answers || {}
+
+    const answersData = safeQuestions.map((q: any) => ({
       attempt_id: attempt.id,
       question_id: q.id,
-      selected_option: answers[q.id] || null,
+      selected_option: safeAnswers[q.id] || null,
       correct_option: q.correct_option,
-      is_correct: answers[q.id] === q.correct_option,
+      is_correct: safeAnswers[q.id] === q.correct_option,
     }))
 
-    const { error: answersError } = await supabase
-      .from('quiz_answers')
-      .insert(answersData)
+    if (answersData.length > 0) {
+      const { error: answersError } = await supabase
+        .from('quiz_answers')
+        .insert(answersData)
 
-    if (answersError) {
-      return NextResponse.json(
-        { error: answersError.message },
-        { status: 500 }
-      )
+      if (answersError) {
+        return NextResponse.json(
+          { error: answersError.message },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json({

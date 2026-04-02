@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 type Question = {
   id: string
@@ -23,26 +23,22 @@ export default function QuizForm({
   questions?: Question[]
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
 
   const safeQuestions = Array.isArray(questions) ? questions : []
-
-  const score = useMemo(() => {
-    return safeQuestions.reduce((total, q) => {
-      return total + (answers[q.id] === q.correct_option ? 1 : 0)
-    }, 0)
-  }, [safeQuestions, answers])
 
   const handleSelect = (questionId: string, option: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: option }))
   }
 
   const handleSubmit = async () => {
-    setSubmitted(true)
     setSaving(true)
     setSaveMessage('')
+
+    const score = safeQuestions.reduce((total, q) => {
+      return total + (answers[q.id] === q.correct_option ? 1 : 0)
+    }, 0)
 
     try {
       const res = await fetch('/api/save-attempt', {
@@ -61,9 +57,16 @@ export default function QuizForm({
 
       if (!res.ok) {
         setSaveMessage(data.error || 'Lưu kết quả thất bại')
-      } else {
-        setSaveMessage('Đã lưu kết quả bài thi')
+        setSaving(false)
+        return
       }
+
+      if (data.attemptId) {
+        window.location.href = `/result?id=${data.attemptId}`
+        return
+      }
+
+      setSaveMessage('Lưu xong nhưng không lấy được mã kết quả')
     } catch (error) {
       setSaveMessage('Có lỗi khi gọi API lưu kết quả')
     } finally {
@@ -114,43 +117,18 @@ export default function QuizForm({
                     </label>
                   ))}
                 </div>
-
-                {submitted && (
-                  <div className="mt-4">
-                    {answers[q.id] === q.correct_option ? (
-                      <p className="text-green-400 font-semibold">Đúng</p>
-                    ) : (
-                      <div>
-                        <p className="text-red-400 font-semibold">
-                          Sai. Đáp án đúng: {q.correct_option}
-                        </p>
-                        {q.explanation && (
-                          <p className="text-white/70 mt-2">
-                            {q.explanation}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             ))}
           </div>
 
           <div className="mt-8 flex items-center gap-4">
-            {!submitted ? (
-              <button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="px-5 py-3 bg-white text-black rounded-lg font-semibold disabled:opacity-50"
-              >
-                {saving ? 'Đang lưu...' : 'Nộp bài'}
-              </button>
-            ) : (
-              <div className="text-xl font-bold">
-                Kết quả: {score}/{safeQuestions.length}
-              </div>
-            )}
+            <button
+              onClick={handleSubmit}
+              disabled={saving}
+              className="px-5 py-3 bg-white text-black rounded-lg font-semibold disabled:opacity-50"
+            >
+              {saving ? 'Đang nộp bài...' : 'Nộp bài'}
+            </button>
           </div>
 
           {saveMessage && (
