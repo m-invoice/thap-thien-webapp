@@ -1,6 +1,21 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+interface Question {
+  id: string
+  correct_options: string[]
+}
+
+function normalizeOptions(options: string[] | null | undefined) {
+  return [...new Set((options || []).map((x) => String(x).trim().toUpperCase()))].sort()
+}
+
+function isSameAnswer(selected: string[], correct: string[]) {
+  const a = normalizeOptions(selected)
+  const b = normalizeOptions(correct)
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -54,13 +69,18 @@ export async function POST(req: Request) {
     const safeQuestions = Array.isArray(questions) ? questions : []
     const safeAnswers = answers || {}
 
-    const answersData = safeQuestions.map((q: any) => ({
-      attempt_id: attempt.id,
-      question_id: q.id,
-      selected_option: safeAnswers[q.id] || null,
-      correct_option: q.correct_option,
-      is_correct: safeAnswers[q.id] === q.correct_option,
-    }))
+    const answersData = safeQuestions.map((q: Question) => {
+      const selected = Array.isArray(safeAnswers[q.id]) ? safeAnswers[q.id] : []
+      const correct = Array.isArray(q.correct_options) ? q.correct_options : []
+
+      return {
+        attempt_id: attempt.id,
+        question_id: q.id,
+        selected_options: normalizeOptions(selected),
+        correct_options: normalizeOptions(correct),
+        is_correct: isSameAnswer(selected, correct),
+      }
+    })
 
     if (answersData.length > 0) {
       const { error: answersError } = await supabase
@@ -79,7 +99,7 @@ export async function POST(req: Request) {
       success: true,
       attemptId: attempt.id,
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Lỗi server khi lưu kết quả' },
       { status: 500 }

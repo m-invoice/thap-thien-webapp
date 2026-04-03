@@ -70,7 +70,7 @@ export default function LoginPage() {
           <button
             onClick={handleSignIn}
             disabled={loading}
-            className="px-6 py-3 rounded-xl bg-white text-black font-semibold disabled:opacity-50"
+            className="px-6 py-3 rounded-xl bg-black text-white dark:bg-white dark:text-black font-semibold disabled:opacity-50"
           >
             {loading ? 'Đang xử lý...' : 'Đăng nhập'}
           </button>

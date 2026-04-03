@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { isAdmin } from '@/lib/supabase/auth/isAdmin'
+import { isAdmin } from '@/lib/auth/isAdmin'
 import AdminQuestionsClientPage from './AdminQuestionsClient'
 
 export default async function AdminQuestionsPage() {

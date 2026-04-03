@@ -1,3 +1,4 @@
+import { createAdminClient } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -17,6 +18,7 @@ type ImportRow = {
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
+    const adminSupabase = createAdminClient()
 
     const {
       data: { user },
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
         option_c: String(row.option_c || '').trim(),
         option_d: String(row.option_d || '').trim(),
         correct_option: correctOption,
+        correct_options: [correctOption],
         explanation: String(row.explanation || '').trim(),
         sort_order: Number(row.sort_order || 0),
         is_published:
@@ -117,7 +120,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await adminSupabase
       .from('questions')
       .insert(insertRows)
 
@@ -132,9 +135,10 @@ export async function POST(req: Request) {
       success: true,
       insertedCount: insertRows.length,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Lỗi server khi import câu hỏi'
     return NextResponse.json(
-      { error: error?.message || 'Lỗi server khi import câu hỏi' },
+      { error: message },
       { status: 500 }
     )
   }

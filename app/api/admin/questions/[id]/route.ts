@@ -1,5 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+
+function normalizeOptions(options: string[] | null | undefined) {
+  return [...new Set((options || []).map((x) => String(x).trim().toUpperCase()))].sort()
+}
 
 export async function PUT(
   req: Request,
@@ -7,7 +11,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await req.json()
 
     const {
@@ -17,7 +21,7 @@ export async function PUT(
       option_b,
       option_c,
       option_d,
-      correct_option,
+      correct_options,
       explanation,
       sort_order,
       is_published,
@@ -29,8 +33,7 @@ export async function PUT(
       !option_a ||
       !option_b ||
       !option_c ||
-      !option_d ||
-      !correct_option
+      !option_d
     ) {
       return NextResponse.json(
         { error: 'Thiếu dữ liệu bắt buộc' },
@@ -38,16 +41,24 @@ export async function PUT(
       )
     }
 
-    const validOption = ['A', 'B', 'C', 'D'].includes(
-      String(correct_option).toUpperCase()
-    )
+    const normalized = normalizeOptions(correct_options)
 
-    if (!validOption) {
+    if (normalized.length === 0) {
       return NextResponse.json(
-        { error: 'correct_option phải là A, B, C hoặc D' },
+        { error: 'Phải chọn ít nhất 1 đáp án đúng' },
         { status: 400 }
       )
     }
+
+    const valid = normalized.every((x) => ['A', 'B', 'C', 'D'].includes(x))
+    if (!valid) {
+      return NextResponse.json(
+        { error: 'correct_options chỉ được chứa A, B, C, D' },
+        { status: 400 }
+      )
+    }
+
+    const firstCorrect = normalized[0] || null
 
     const { data, error } = await supabase
       .from('questions')
@@ -58,7 +69,8 @@ export async function PUT(
         option_b: String(option_b).trim(),
         option_c: String(option_c).trim(),
         option_d: String(option_d).trim(),
-        correct_option: String(correct_option).trim().toUpperCase(),
+        correct_options: normalized,
+        correct_option: firstCorrect,
         explanation: String(explanation || '').trim(),
         sort_order: Number(sort_order || 0),
         is_published: Boolean(is_published),
@@ -72,7 +84,7 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true, data })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Không cập nhật được câu hỏi' },
       { status: 500 }
@@ -86,7 +98,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { error } = await supabase
       .from('questions')
@@ -98,7 +110,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Không xóa được câu hỏi' },
       { status: 500 }
