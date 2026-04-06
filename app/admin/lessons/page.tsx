@@ -2,27 +2,24 @@ import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-type QuestionRow = {
+type LessonRow = {
   id: string
-  question: string
+  title: string
+  lesson_no: number | null
   sort_order: number | null
   is_published: boolean | null
-  correct_options: string[] | null
   topics: {
     title: string
     slug: string
   } | null
-  lessons: {
-    title: string
-  } | null
 }
 
-type RawQuestionRow = {
+type RawLessonRow = {
   id: string
-  question: string
+  title: string
+  lesson_no: number | null
   sort_order: number | null
   is_published: boolean | null
-  correct_options: string[] | null
   topics:
     | {
         title: string
@@ -33,17 +30,9 @@ type RawQuestionRow = {
         slug: string
       }[]
     | null
-  lessons:
-    | {
-        title: string
-      }
-    | {
-        title: string
-      }[]
-    | null
 }
 
-export default async function AdminQuestionsPage() {
+export default async function AdminLessonsPage() {
   const supabase = await createServerClient()
 
   const {
@@ -68,19 +57,16 @@ export default async function AdminQuestionsPage() {
   }
 
   const { data, error } = await supabase
-    .from('questions')
+    .from('lessons')
     .select(`
       id,
-      question,
+      title,
+      lesson_no,
       sort_order,
       is_published,
-      correct_options,
       topics (
         title,
         slug
-      ),
-      lessons (
-        title
       )
     `)
     .order('sort_order', { ascending: true })
@@ -88,34 +74,28 @@ export default async function AdminQuestionsPage() {
   if (error) {
     return (
       <main className="min-h-screen bg-white p-6 text-black dark:bg-black dark:text-white">
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-6xl">
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-500">
-            Lỗi tải danh sách câu hỏi: {error.message}
+            Lỗi tải danh sách bài giảng: {error.message}
           </div>
         </div>
       </main>
     )
   }
 
-  const questions: QuestionRow[] = ((data as RawQuestionRow[]) || []).map((item) => {
+  const lessons: LessonRow[] = ((data as RawLessonRow[]) || []).map((item) => {
     const topic = Array.isArray(item.topics) ? item.topics[0] || null : item.topics
-    const lesson = Array.isArray(item.lessons) ? item.lessons[0] || null : item.lessons
 
     return {
       id: item.id,
-      question: item.question,
+      title: item.title,
+      lesson_no: item.lesson_no,
       sort_order: item.sort_order,
       is_published: item.is_published,
-      correct_options: item.correct_options || [],
       topics: topic
         ? {
             title: topic.title,
             slug: topic.slug,
-          }
-        : null,
-      lessons: lesson
-        ? {
-            title: lesson.title,
           }
         : null,
     }
@@ -123,12 +103,12 @@ export default async function AdminQuestionsPage() {
 
   return (
     <main className="min-h-screen bg-white p-6 text-black dark:bg-black dark:text-white">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Admin câu hỏi</h1>
+            <h1 className="text-3xl font-bold">Admin bài giảng</h1>
             <p className="mt-2 text-black/60 dark:text-white/60">
-              Quản lý ngân hàng câu hỏi ôn luyện và thi thử.
+              Quản lý danh sách bài học theo chủ đề.
             </p>
           </div>
 
@@ -141,10 +121,10 @@ export default async function AdminQuestionsPage() {
             </Link>
 
             <Link
-              href="/admin/questions/new"
+              href="/admin/lessons/new"
               className="rounded-xl bg-black px-4 py-2 text-white dark:bg-white dark:text-black"
             >
-              + Tạo câu hỏi
+              + Tạo bài giảng
             </Link>
           </div>
         </div>
@@ -153,10 +133,9 @@ export default async function AdminQuestionsPage() {
           <table className="w-full text-sm">
             <thead className="bg-black/5 dark:bg-white/5">
               <tr>
-                <th className="p-3 text-left">Câu hỏi</th>
-                <th className="p-3 text-left">Chủ đề</th>
                 <th className="p-3 text-left">Bài</th>
-                <th className="p-3 text-left">Đáp án đúng</th>
+                <th className="p-3 text-left">Tiêu đề</th>
+                <th className="p-3 text-left">Chủ đề</th>
                 <th className="p-3 text-left">Thứ tự</th>
                 <th className="p-3 text-left">Trạng thái</th>
                 <th className="p-3 text-left">Thao tác</th>
@@ -164,26 +143,23 @@ export default async function AdminQuestionsPage() {
             </thead>
 
             <tbody>
-              {questions.length === 0 ? (
+              {lessons.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-black/60 dark:text-white/60">
-                    Chưa có câu hỏi nào.
+                  <td colSpan={6} className="p-6 text-center text-black/60 dark:text-white/60">
+                    Chưa có bài giảng nào.
                   </td>
                 </tr>
               ) : (
-                questions.map((item) => (
-                  <tr key={item.id} className="border-t border-black/10 dark:border-white/10">
-                    <td className="max-w-[420px] p-3 font-medium">
-                      <div className="line-clamp-2">{item.question}</div>
-                    </td>
-                    <td className="p-3">{item.topics?.title || '—'}</td>
-                    <td className="p-3">{item.lessons?.title || '—'}</td>
-                    <td className="p-3">{item.correct_options?.join(', ') || '—'}</td>
-                    <td className="p-3">{item.sort_order ?? 0}</td>
-                    <td className="p-3">{item.is_published ? 'Hiện' : 'Ẩn'}</td>
+                lessons.map((lesson) => (
+                  <tr key={lesson.id} className="border-t border-black/10 dark:border-white/10">
+                    <td className="p-3">{lesson.lesson_no ?? '-'}</td>
+                    <td className="p-3 font-medium">{lesson.title}</td>
+                    <td className="p-3">{lesson.topics?.title || 'Chưa gán chủ đề'}</td>
+                    <td className="p-3">{lesson.sort_order ?? 0}</td>
+                    <td className="p-3">{lesson.is_published ? 'Hiện' : 'Ẩn'}</td>
                     <td className="p-3">
                       <Link
-                        href={`/admin/questions/${item.id}`}
+                        href={`/admin/lessons/${lesson.id}`}
                         className="rounded-lg border border-black/10 px-3 py-2 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/5"
                       >
                         Sửa

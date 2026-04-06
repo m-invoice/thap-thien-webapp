@@ -5,16 +5,13 @@ type ProfileRow = {
   role: string | null
 } | null
 
-type UpdateQuestionBody = {
+type UpdateLessonBody = {
   topic_id?: string | null
-  lesson_id?: string | null
-  question?: string | null
-  option_a?: string | null
-  option_b?: string | null
-  option_c?: string | null
-  option_d?: string | null
-  correct_options?: string[] | null
-  explanation?: string | null
+  title?: string | null
+  slug?: string | null
+  lesson_no?: number | null
+  summary?: string | null
+  content?: string | null
   sort_order?: number | null
   is_published?: boolean | null
 }
@@ -25,9 +22,10 @@ function normalizeNullableString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function normalizeCorrectOptions(value: unknown) {
-  if (!Array.isArray(value)) return []
-  return [...new Set(value.map((x) => String(x).trim().toUpperCase()).filter(Boolean))].sort()
+function normalizeNullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
 }
 
 async function requireAdmin() {
@@ -76,18 +74,15 @@ export async function GET(
     const adminClient = createAdminClient()
 
     const { data, error } = await adminClient
-      .from('questions')
+      .from('lessons')
       .select(`
         id,
         topic_id,
-        lesson_id,
-        question,
-        option_a,
-        option_b,
-        option_c,
-        option_d,
-        correct_options,
-        explanation,
+        title,
+        slug,
+        lesson_no,
+        summary,
+        content,
         sort_order,
         is_published,
         created_at,
@@ -101,13 +96,13 @@ export async function GET(
     }
 
     if (!data) {
-      return NextResponse.json({ error: 'Không tìm thấy câu hỏi' }, { status: 404 })
+      return NextResponse.json({ error: 'Không tìm thấy bài giảng' }, { status: 404 })
     }
 
     return NextResponse.json({ data })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải câu hỏi' },
+      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải bài giảng' },
       { status: 500 }
     )
   }
@@ -129,87 +124,95 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const body = (await req.json()) as UpdateQuestionBody
+    const body = (await req.json()) as UpdateLessonBody
 
     const topic_id = normalizeNullableString(body.topic_id)
-    const lesson_id = normalizeNullableString(body.lesson_id)
-    const question = normalizeNullableString(body.question)
-    const option_a = normalizeNullableString(body.option_a)
-    const option_b = normalizeNullableString(body.option_b)
-    const option_c = normalizeNullableString(body.option_c)
-    const option_d = normalizeNullableString(body.option_d)
-    const correct_options = normalizeCorrectOptions(body.correct_options)
-    const explanation = normalizeNullableString(body.explanation)
-    const sort_order = Number(body.sort_order ?? 0)
+    const title = normalizeNullableString(body.title)
+    const slug = normalizeNullableString(body.slug)
+    const summary = normalizeNullableString(body.summary)
+    const content = normalizeNullableString(body.content)
+    const lesson_no = normalizeNullableNumber(body.lesson_no)
+    const sort_order = normalizeNullableNumber(body.sort_order) ?? 0
     const is_published = Boolean(body.is_published)
 
     if (!topic_id) {
       return NextResponse.json({ error: 'Thiếu topic_id' }, { status: 400 })
     }
 
-    if (!question) {
-      return NextResponse.json({ error: 'Nội dung câu hỏi không được để trống' }, { status: 400 })
-    }
-
-    if (!option_a || !option_b) {
-      return NextResponse.json({ error: 'Ít nhất phải có đáp án A và B' }, { status: 400 })
-    }
-
-    if (correct_options.length === 0) {
-      return NextResponse.json({ error: 'Phải chọn ít nhất 1 đáp án đúng' }, { status: 400 })
-    }
-
-    const validOptions = ['A', 'B', 'C', 'D']
-    const hasInvalid = correct_options.some((item) => !validOptions.includes(item))
-    if (hasInvalid) {
-      return NextResponse.json({ error: 'correct_options không hợp lệ' }, { status: 400 })
+    if (!title) {
+      return NextResponse.json({ error: 'Tiêu đề bài giảng không được để trống' }, { status: 400 })
     }
 
     const adminClient = createAdminClient()
 
-    const { data: exists, error: checkError } = await adminClient
-      .from('questions')
+    const { data: lessonExists, error: lessonCheckError } = await adminClient
+      .from('lessons')
       .select('id')
       .eq('id', id)
       .maybeSingle()
 
-    if (checkError) {
-      return NextResponse.json({ error: checkError.message }, { status: 400 })
+    if (lessonCheckError) {
+      return NextResponse.json({ error: lessonCheckError.message }, { status: 400 })
     }
 
-    if (!exists) {
-      return NextResponse.json({ error: 'Câu hỏi không tồn tại' }, { status: 404 })
+    if (!lessonExists) {
+      return NextResponse.json({ error: 'Bài giảng không tồn tại' }, { status: 404 })
+    }
+
+    const { data: topicExists, error: topicError } = await adminClient
+      .from('topics')
+      .select('id')
+      .eq('id', topic_id)
+      .maybeSingle()
+
+    if (topicError) {
+      return NextResponse.json({ error: topicError.message }, { status: 400 })
+    }
+
+    if (!topicExists) {
+      return NextResponse.json({ error: 'Chủ đề không tồn tại' }, { status: 400 })
+    }
+
+    if (slug) {
+      const { data: existingSlug, error: slugError } = await adminClient
+        .from('lessons')
+        .select('id')
+        .eq('slug', slug)
+        .neq('id', id)
+        .maybeSingle()
+
+      if (slugError) {
+        return NextResponse.json({ error: slugError.message }, { status: 400 })
+      }
+
+      if (existingSlug) {
+        return NextResponse.json({ error: 'Slug đã tồn tại, vui lòng chọn slug khác' }, { status: 400 })
+      }
     }
 
     const payload = {
       topic_id,
-      lesson_id,
-      question,
-      option_a,
-      option_b,
-      option_c,
-      option_d,
-      correct_options,
-      explanation,
-      sort_order: Number.isFinite(sort_order) ? sort_order : 0,
+      title,
+      slug,
+      lesson_no,
+      summary,
+      content,
+      sort_order,
       is_published,
     }
 
     const { data, error } = await adminClient
-      .from('questions')
+      .from('lessons')
       .update(payload)
       .eq('id', id)
       .select(`
         id,
         topic_id,
-        lesson_id,
-        question,
-        option_a,
-        option_b,
-        option_c,
-        option_d,
-        correct_options,
-        explanation,
+        title,
+        slug,
+        lesson_no,
+        summary,
+        content,
         sort_order,
         is_published,
         created_at,
@@ -224,7 +227,7 @@ export async function PATCH(
     return NextResponse.json({ data })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật câu hỏi' },
+      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật bài giảng' },
       { status: 500 }
     )
   }
@@ -248,22 +251,22 @@ export async function DELETE(
     const { id } = await params
     const adminClient = createAdminClient()
 
-    const { data: exists, error: checkError } = await adminClient
-      .from('questions')
+    const { data: lessonExists, error: lessonCheckError } = await adminClient
+      .from('lessons')
       .select('id')
       .eq('id', id)
       .maybeSingle()
 
-    if (checkError) {
-      return NextResponse.json({ error: checkError.message }, { status: 400 })
+    if (lessonCheckError) {
+      return NextResponse.json({ error: lessonCheckError.message }, { status: 400 })
     }
 
-    if (!exists) {
-      return NextResponse.json({ error: 'Câu hỏi không tồn tại' }, { status: 404 })
+    if (!lessonExists) {
+      return NextResponse.json({ error: 'Bài giảng không tồn tại' }, { status: 404 })
     }
 
     const { error } = await adminClient
-      .from('questions')
+      .from('lessons')
       .delete()
       .eq('id', id)
 
@@ -274,7 +277,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi xóa câu hỏi' },
+      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi xóa bài giảng' },
       { status: 500 }
     )
   }

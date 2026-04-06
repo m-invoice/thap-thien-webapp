@@ -5,7 +5,7 @@ type ProfileRow = {
   role: string | null
 } | null
 
-type CreateTopicBody = {
+type UpdateTopicBody = {
   title?: string | null
   slug?: string | null
   description?: string | null
@@ -31,15 +31,11 @@ async function requireAdmin() {
     return { error: 'UNAUTHORIZED', user: null }
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .maybeSingle()
-
-  if (profileError) {
-    return { error: profileError.message, user: null }
-  }
 
   const safeProfile = profile as ProfileRow
 
@@ -50,7 +46,10 @@ async function requireAdmin() {
   return { error: null, user }
 }
 
-export async function GET() {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const auth = await requireAdmin()
 
@@ -62,10 +61,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Bạn không có quyền admin' }, { status: 403 })
     }
 
-    if (auth.error && auth.error !== 'UNAUTHORIZED' && auth.error !== 'FORBIDDEN') {
-      return NextResponse.json({ error: auth.error }, { status: 400 })
-    }
-
+    const { id } = await params
     const adminClient = createAdminClient()
 
     const { data, error } = await adminClient
@@ -80,13 +76,18 @@ export async function GET() {
         created_at,
         updated_at
       `)
-      .order('sort_order', { ascending: true })
+      .eq('id', id)
+      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ data: data || [] }, { status: 200 })
+    if (!data) {
+      return NextResponse.json({ error: 'Không tìm thấy chủ đề' }, { status: 404 })
+    }
+
+    return NextResponse.json({ data }, { status: 200 })
   } catch (error) {
     return NextResponse.json(
       {
@@ -97,7 +98,10 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const auth = await requireAdmin()
 
@@ -109,11 +113,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Bạn không có quyền admin' }, { status: 403 })
     }
 
-    if (auth.error && auth.error !== 'UNAUTHORIZED' && auth.error !== 'FORBIDDEN') {
-      return NextResponse.json({ error: auth.error }, { status: 400 })
-    }
-
-    const body = (await req.json()) as CreateTopicBody
+    const { id } = await params
+    const body = (await req.json()) as UpdateTopicBody
 
     const title = normalizeNullableString(body.title)
     const slug = normalizeNullableString(body.slug)
@@ -131,10 +132,25 @@ export async function POST(req: Request) {
 
     const adminClient = createAdminClient()
 
+    const { data: exists, error: checkError } = await adminClient
+      .from('topics')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (checkError) {
+      return NextResponse.json({ error: checkError.message }, { status: 400 })
+    }
+
+    if (!exists) {
+      return NextResponse.json({ error: 'Chủ đề không tồn tại' }, { status: 404 })
+    }
+
     const { data: existingSlug, error: slugError } = await adminClient
       .from('topics')
       .select('id')
       .eq('slug', slug)
+      .neq('id', id)
       .maybeSingle()
 
     if (slugError) {
@@ -155,7 +171,8 @@ export async function POST(req: Request) {
 
     const { data, error } = await adminClient
       .from('topics')
-      .insert(payload)
+      .update(payload)
+      .eq('id', id)
       .select(`
         id,
         title,
@@ -172,10 +189,64 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ data }, { status: 201 })
+    return NextResponse.json({ data }, { status: 200 })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tạo chủ đề' },
+      {
+        error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật chủ đề',
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = await requireAdmin()
+
+    if (auth.error === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'Bạn chưa đăng nhập' }, { status: 401 })
+    }
+
+    if (auth.error === 'FORBIDDEN') {
+      return NextResponse.json({ error: 'Bạn không có quyền admin' }, { status: 403 })
+    }
+
+    const { id } = await params
+    const adminClient = createAdminClient()
+
+    const { data: exists, error: checkError } = await adminClient
+      .from('topics')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (checkError) {
+      return NextResponse.json({ error: checkError.message }, { status: 400 })
+    }
+
+    if (!exists) {
+      return NextResponse.json({ error: 'Chủ đề không tồn tại' }, { status: 404 })
+    }
+
+    const { error } = await adminClient
+      .from('topics')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Có lỗi xảy ra khi xóa chủ đề',
+      },
       { status: 500 }
     )
   }
